@@ -1,0 +1,23 @@
+{
+  "name": "testenvironmentmanager",
+  "version": "0.1.0",
+  "description": "",
+  "main": "src/index.ts",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "tsx src/index.ts"
+  },
+  "author": "Switt Kongdachalert",
+  "license": "ISC",
+  "dependencies": {
+    "@types/dockerode": "^3.3.34",
+    "@types/dockerode-compose": "^1.4.1",
+    "@types/node": "^22.13.4",
+    "child_process": "^1.0.2",
+    "dockerode": "^4.0.4",
+    "dockerode-compose": "^1.4.0",
+    "express": "^4.21.2",
+    "tsx": "^4.19.2",
+    "uuid": "^11.0.5"
+  }
+}
