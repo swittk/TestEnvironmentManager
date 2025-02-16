@@ -10,7 +10,7 @@ interface PortMapping {
 
 export class PortForwardingService {
   private portMappings = new Map<string, PortMapping>();
-
+  public staticMappings = new Map<string, PortMapping>();
   constructor(
     private baseHostname: string = 'testing.mysite.com',
     private cleanupInterval: number = 3600000 // 1 hour
@@ -38,6 +38,22 @@ export class PortForwardingService {
 
       // Extract port identifier from subdomain
       const portIdentifier = hostname.split('.')[0];
+
+      // exception for static mappings
+      if (this.staticMappings.has(portIdentifier)) {
+        const mapping = this.staticMappings.get(portIdentifier)!;
+        // Update last accessed time
+        mapping.lastAccessed = new Date();
+        // Create proxy to forward request to correct port
+        const proxy = createProxyMiddleware({
+          target: `http://localhost:${mapping.port}`,
+          changeOrigin: true,
+          ws: true, // Enable WebSocket proxy
+          xfwd: true // Forward original headers
+        });
+
+        return proxy(req, res, next);
+      }
       if (!portIdentifier.startsWith('port_')) {
         res.status(400).send('Invalid port identifier');
         return;
@@ -72,6 +88,12 @@ export class PortForwardingService {
       port,
       lastAccessed: new Date()
     });
+  }
+  registerStaticMapping(mappedComponent: string, port: number) {
+    this.staticMappings.set(mappedComponent, {
+      port,
+      lastAccessed: new Date()
+    })
   }
 
   // Remove a port mapping

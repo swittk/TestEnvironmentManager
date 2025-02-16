@@ -9,11 +9,15 @@ async function main() {
   if (testEnvironmentManagerExternalDomain) {
     manager.setExternalDomain(testEnvironmentManagerExternalDomain);
     const portForwarder = manager.portForwarder;
-    if(!portForwarder) {
+    if (!portForwarder) {
       throw 'F';
     }
     const portforwarder_port = process.env.PORTFORWARDER_PORT || 3501;
-    portForwarder.createServer().listen(portforwarder_port, ()=>{
+    const staticMapServerPortDomain = process.env.TSMANAGER_SERVER_PORT_DOMAIN;
+    if (staticMapServerPortDomain) {
+      portForwarder.registerStaticMapping(staticMapServerPortDomain, Number(port));
+    }
+    portForwarder.createServer().listen(portforwarder_port, () => {
       console.log(`Environment manager port forwarder listening on port ${portforwarder_port}`);
     });
   }
