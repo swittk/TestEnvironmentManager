@@ -40,20 +40,24 @@ export class EnvironmentManager {
   public environments: Map<string, Environment> = new Map();
   private docker = new Docker();
   private defaultConfig: TestEnvironmentConfig;
-  private portForwarder?: PortForwardingService;
+  public portForwarder?: PortForwardingService;
 
   constructor(configPath?: string | TestEnvironmentConfig) {
     this.defaultConfig = loadConfig(configPath);
     const externalDomain = this.defaultConfig.environment?.externalDomain;
     if (externalDomain) {
-      this.portForwarder = new PortForwardingService(externalDomain);
+      this.setExternalDomain(externalDomain);
     }
     setInterval(
       () => this.cleanupInactiveEnvironments(),
       this.defaultConfig.environment?.timeouts?.inactive ?? theDefaultConfig.environment!.timeouts!.inactive
     );
   }
-
+  setExternalDomain(extDomain: string) {
+    if (extDomain) {
+      this.portForwarder = new PortForwardingService(extDomain);
+    }
+  }
   private async cloneRepo(branch: string, config?: TestEnvironmentConfig): Promise<string> {
     const workDir = path.join(os.tmpdir(), `test-env-${uuidv4()}`);
     await fs.promises.mkdir(workDir, { recursive: true });
@@ -363,7 +367,8 @@ export function createServer(configPath?: string | TestEnvironmentConfig) {
   app.get('/environments/:id', async (req, res) => {
     const env = manager.environments.get(req.params.id);
     if (!env) {
-      return res.status(404).json({ error: 'Environment not found' });
+      res.status(404).json({ error: 'Environment not found' });
+      return;
     }
     env.lastAccessed = new Date();
     res.json(env);
@@ -378,5 +383,5 @@ export function createServer(configPath?: string | TestEnvironmentConfig) {
     }
   });
 
-  return app;
+  return { app, manager };
 }

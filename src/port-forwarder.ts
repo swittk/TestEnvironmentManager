@@ -10,7 +10,7 @@ interface PortMapping {
 
 export class PortForwardingService {
   private portMappings = new Map<string, PortMapping>();
-  
+
   constructor(
     private baseHostname: string = 'testing.mysite.com',
     private cleanupInterval: number = 3600000 // 1 hour
@@ -26,23 +26,27 @@ export class PortForwardingService {
     app.use((req, res, next) => {
       const hostname = req.hostname || req.headers.host;
       if (!hostname) {
-        return res.status(400).send('No hostname provided');
+        res.status(400).send('No hostname provided');
+        return;
       }
 
       // Check if this is a testing subdomain request
       if (!hostname.endsWith(this.baseHostname)) {
-        return res.status(404).send('Invalid domain');
+        res.status(404).send('Invalid domain');
+        return;
       }
 
       // Extract port identifier from subdomain
       const portIdentifier = hostname.split('.')[0];
       if (!portIdentifier.startsWith('port_')) {
-        return res.status(400).send('Invalid port identifier');
+        res.status(400).send('Invalid port identifier');
+        return;
       }
 
       const mapping = this.portMappings.get(portIdentifier);
       if (!mapping) {
-        return res.status(404).send('Port mapping not found');
+        res.status(404).send('Port mapping not found');
+        return;
       }
 
       // Update last accessed time
