@@ -117,6 +117,9 @@ export interface EnvironmentConfig {
    */
   serverEnv?: Record<string, string>;
 
+  /** The external domain to use as the base for the port mapping */
+  externalDomain?: string;
+
   /**
    * Port range for spawned test environments
    * Each environment gets a unique port from this range

@@ -8,6 +8,7 @@ import path from 'path';
 import fs from 'fs';
 import os from 'os';
 import { TestEnvironmentConfig, defaultConfig as theDefaultConfig, loadConfig } from './config';
+import { PortForwardingService } from './port-forwarder';
 
 export interface Environment {
   id: string;
@@ -16,6 +17,7 @@ export interface Environment {
   port: number;
   status: 'starting' | 'ready' | 'error';
   url: string;
+  externalUrl?: string;
   // Track both main container and related containers
   /** 
    * Main container for backwards compatibility
@@ -38,8 +40,14 @@ export class EnvironmentManager {
   public environments: Map<string, Environment> = new Map();
   private docker = new Docker();
   private defaultConfig: TestEnvironmentConfig;
+  private portForwarder?: PortForwardingService;
+
   constructor(configPath?: string | TestEnvironmentConfig) {
     this.defaultConfig = loadConfig(configPath);
+    const externalDomain = this.defaultConfig.environment?.externalDomain;
+    if (externalDomain) {
+      this.portForwarder = new PortForwardingService(externalDomain);
+    }
     setInterval(
       () => this.cleanupInactiveEnvironments(),
       this.defaultConfig.environment?.timeouts?.inactive ?? theDefaultConfig.environment!.timeouts!.inactive
@@ -132,6 +140,13 @@ export class EnvironmentManager {
       url: `http://localhost:${port}`,
       lastAccessed: new Date()
     };
+
+    // Generate port identifier and register with forwarder
+    const portIdentifier = `port_${env.port}`;
+    if (this.portForwarder) {
+      this.portForwarder.registerPort(portIdentifier, env.port);
+      env.externalUrl = this.portForwarder.getUrl(portIdentifier) || env.url;
+    }
 
     this.environments.set(id, env);
 
@@ -275,7 +290,10 @@ export class EnvironmentManager {
         await container.stop();
         await container.remove();
       }
-
+      if (this.portForwarder) {
+        const portIdentifier = `port_${env.port}`;
+        this.portForwarder.removePort(portIdentifier);
+      }
       if (env.workDir) {
         await fs.promises.rm(env.workDir, { recursive: true, force: true });
       }
