@@ -202,7 +202,7 @@ export class EnvironmentManager {
 
     const docker = new Docker();
     // Create compose instance
-    const compose = new DockerCompose(docker, composeFile, workDir);
+    const compose = new DockerCompose(docker, composeFile, mainService);
     console.log('about to create compose setup for', composeFile, 'at directory', workDir);
     // If a custom template is provided, write it to the compose file
     if (composeConfig.composeTemplate) {
