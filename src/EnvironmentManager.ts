@@ -10,6 +10,17 @@ import os from 'os';
 import { TestEnvironmentConfig, defaultConfig as theDefaultConfig, loadConfig } from './config';
 import { PortForwardingService } from './port-forwarder';
 
+function execAsync(cmd: string) {
+  return new Promise((resolve, reject) => {
+    exec(cmd, (error, stdout, stderr) => {
+      if (error) return reject(error)
+      if (stderr) return reject(stderr)
+      resolve(stdout)
+    })
+  })
+}
+
+
 export interface Environment {
   id: string;
   branch: string;
@@ -81,9 +92,10 @@ export class EnvironmentManager {
         cloneCmd = `GIT_SSH_COMMAND='ssh -i ${gitConfig.auth.sshKeyPath}' ${cloneCmd}`;
       }
     }
-
-    await exec(cloneCmd);
-    await exec(`cd ${workDir} && git checkout ${branch}`);
+    console.log('cloning the repo...')
+    await execAsync(cloneCmd);
+    console.log('Checking out')
+    await execAsync(`cd ${workDir} && git checkout ${branch}`);
 
     return workDir;
   }
