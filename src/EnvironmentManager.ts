@@ -191,7 +191,7 @@ export class EnvironmentManager {
     const docker = new Docker();
     // Create compose instance
     const compose = new DockerCompose(docker, composeFile, workDir);
-
+    console.log('about to create compose setup for', composeFile, 'at directory', workDir);
     // If a custom template is provided, write it to the compose file
     if (composeConfig.composeTemplate) {
       // Replace template variables
@@ -205,8 +205,12 @@ export class EnvironmentManager {
       );
     }
 
+    console.log('pulling compose...');
     // Start compose services
+    await compose.pull();
+    console.log('running compose up...');
     const composeUpResults = await compose.up();
+    console.log('Completed compose up');
     // Get container ID of main service
     const services = composeUpResults.services;
     // Store all container information
