@@ -14,7 +14,7 @@ function execAsync(cmd: string) {
   return new Promise((resolve, reject) => {
     exec(cmd, (error, stdout, stderr) => {
       if (error) return reject(error)
-      if (stderr) return reject(stderr)
+      // if (stderr) return reject(stderr)
       resolve(stdout)
     })
   })
