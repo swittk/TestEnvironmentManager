@@ -185,7 +185,7 @@ export class EnvironmentManager {
     const composeConfig = config.docker?.dockerCompose;
     if (!composeConfig) throw new Error("No Docker Compose configuration provided");
 
-    const composeFile = composeConfig.composeFile || './docker-compose.yml';
+    const composeFile = path.resolve(workDir, composeConfig.composeFile || './docker-compose.yml');
     const mainService = composeConfig.mainService || 'app';
 
     const docker = new Docker();
