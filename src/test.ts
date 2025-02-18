@@ -28,6 +28,7 @@ async function test() {
       branch: "prescriptionstuff",
     })
   })
-  console.log('spun up results', await res.json())
+  const restext = await res.text();
+  console.log('spun up results', restext)
 }
 test();
