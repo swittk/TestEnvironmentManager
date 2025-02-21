@@ -93,6 +93,14 @@ export interface DockerConfig {
      * Custom compose file content template
      */
     composeTemplate?: string;
+    /**
+     * Specific environment file to use
+     */
+    envFile?: string;
+    /**
+     * Specific environment file data to use
+     */
+    envFileData?: string;
   };
 
 

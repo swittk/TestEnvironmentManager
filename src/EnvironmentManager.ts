@@ -11,7 +11,7 @@ import { TestEnvironmentConfig, defaultConfig as theDefaultConfig, loadConfig } 
 import { PortForwardingService } from './port-forwarder';
 
 function execAsync(cmd: string) {
-  return new Promise((resolve, reject) => {
+  return new Promise<string>((resolve, reject) => {
     exec(cmd, (error, stdout, stderr) => {
       if (error) return reject(error)
       // if (stderr) return reject(stderr)
@@ -39,10 +39,11 @@ export interface Environment {
     containers: Array<{
       id: string;
       name: string;
-      service: Docker.ContainerInspectInfo;
+      // service: Docker.ContainerInspectInfo;
     }>;
   };
   isCompose?: boolean;
+  composeFile?: string;
   lastAccessed: Date;
   workDir?: string;
 }
@@ -199,10 +200,19 @@ export class EnvironmentManager {
 
     const composeFile = path.resolve(workDir, composeConfig.composeFile || './docker-compose.yml');
     const mainService = composeConfig.mainService || 'app';
+    let envFile: string | undefined;
+    if (composeConfig.envFile) {
+      envFile = path.resolve(workDir, composeConfig.envFile);
+    }
+    else if (composeConfig.envFileData) {
+      const envFilePath = path.resolve(workDir, '.tev_env_file');
+      fs.writeFileSync(envFilePath, composeConfig.envFileData);
+      envFile = envFilePath;
+    }
 
-    const docker = new Docker();
+    // const docker = new Docker();
     // Create compose instance
-    const compose = new DockerCompose(docker, composeFile, mainService);
+    // const compose = new DockerCompose(docker, composeFile, mainService);
     console.log('about to create compose setup for', composeFile, 'at directory', workDir);
     // If a custom template is provided, write it to the compose file
     if (composeConfig.composeTemplate) {
@@ -216,34 +226,39 @@ export class EnvironmentManager {
         template
       );
     }
+    // Spin up our stuff
+    await execAsync(`docker compose up -d --project-directory ${workDir} -f ${composeFile}${envFile ? ` --env-file ${envFile}` : ''}`)
 
-    console.log('pulling compose...');
-    // Start compose services
-    await compose.pull();
-    console.log('running compose up...');
-    const composeUpResults = await compose.up();
-    console.log('Completed compose up');
-    // Get container ID of main service
-    const services = composeUpResults.services;
+    // Get docker containers and their original compose working directories
+    // await execAsync(`docker inspect --format='container name: {{.Name}}, path: {{index (index .Config.Labels "com.docker.compose.project.working_dir")}}' $(docker ps -q)`)
+
+    // Get docker containers associated with a original compose directory, and make it json format!
+    const resultingContainersRaw = await execAsync(`docker ps --filter "label=com.docker.compose.project.working_dir=${escapeQuotedArgumentPath(workDir)}" --format '{{ json .}}'`);
+    const resultingContainers = formatDockerJSONOutputString(resultingContainersRaw);
+    // console.log('pulling compose...');
+    // // Start compose services
+    // await compose.pull();
+    // console.log('running compose up...');
+    // const composeUpResults = await compose.up();
+    // console.log('Completed compose up');
+    // // Get container ID of main service
+    // const services = composeUpResults.services;
     // Store all container information
     env.isCompose = true;
     env.containers = {
       mainService,
-      containers: await Promise.all(services.map(async service => {
-        const serviceInfo = (await service.inspect());
+      containers: resultingContainers.map((v) => {
         return {
-          id: service.id,
-          service: serviceInfo,
-          name: serviceInfo.Name,
+          id: v.ID,
+          name: v.Names
         }
       })
-      )
     };
-    const mainContainer = env.containers.containers.find(s => s.name === mainService);
-    if (!mainContainer) {
-      throw new Error(`Main service '${mainService}' not found`);
-    }
-    env.containerId = mainContainer.id;
+    // const mainContainer = env.containers.containers.find(s => s.name === mainService);
+    // if (!mainContainer) {
+    //   throw new Error(`Main service '${mainService}' not found`);
+    // }
+    // env.containerId = mainContainer.id;
   }
 
   private async startWithDocker(
@@ -309,6 +324,10 @@ export class EnvironmentManager {
         const container = this.docker.getContainer(env.containerId);
         await container.stop();
         await container.remove();
+      }
+      if(env.composeFile) {
+        const theServices = await getComposeFileServices(env.composeFile)
+        await execAsync(`docker compose down ${env.composeFile}`);
       }
       if (this.portForwarder) {
         const portIdentifier = `port_${env.port}`;
@@ -400,4 +419,46 @@ export function createServer(configPath?: string | TestEnvironmentConfig) {
   });
 
   return { app, manager };
+}
+
+/**
+ * Function to safely escape workDir paths for shell execution
+ * @param {string} workDir - The working directory path
+ * @returns {string} - Escaped workDir for shell usage
+ */
+function escapeQuotedArgumentPath(value: string) {
+  // Escape double quotes and backslashes in the value
+  return value.replace(/["\\]/g, '\\$&');
+}
+
+type DockerPsEntry = {
+  Command: string;
+  CreatedAt: string;
+  ID: string;
+  Image: string;
+  Labels: string; // Can be further processed into a key-value object if necessary
+  LocalVolumes: string;
+  Mounts: string;
+  Names: string;
+  Networks: string;
+  Ports: string;
+  RunningFor: string;
+  Size: string;
+  State: string;
+  Status: string;
+};
+
+function formatDockerJSONOutputString(rawOutput: string): DockerPsEntry[] {
+  // Each line is a JSON object, so split and parse
+  const containers = rawOutput
+    .trim()
+    .split("\n")
+    .map(line => JSON.parse(line));
+  console.log(JSON.stringify(containers, null, 2)); // Pretty-print JSON
+  return containers;
+}
+
+async function getComposeFileServices(composePath: string) {
+  const res = await execAsync(`docker ps --filter "label=com.docker.compose.project.config_files=${escapeQuotedArgumentPath(composePath)}" --format '{{json .}}'`);
+  return formatDockerJSONOutputString(res);
 }
