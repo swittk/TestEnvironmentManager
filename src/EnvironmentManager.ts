@@ -70,7 +70,7 @@ export class EnvironmentManager {
       this.portForwarder = new PortForwardingService(extDomain);
     }
   }
-  private async cloneRepo(branch: string, config?: TestEnvironmentConfig): Promise<string> {
+  private async cloneRepo(branch?: string, config?: TestEnvironmentConfig): Promise<string> {
     const workDir = path.join(os.tmpdir(), `test-env-${uuidv4()}`);
     await fs.promises.mkdir(workDir, { recursive: true });
 
@@ -95,9 +95,10 @@ export class EnvironmentManager {
     }
     console.log('cloning the repo...')
     await execAsync(cloneCmd);
-    console.log('Checking out')
-    await execAsync(`cd ${workDir} && git checkout ${branch}`);
-
+    if (branch) {
+      console.log('Checking out')
+      await execAsync(`cd ${workDir} && git checkout ${branch}`);
+    }
     return workDir;
   }
 
@@ -227,7 +228,7 @@ export class EnvironmentManager {
       );
     }
     // Spin up our stuff
-    await execAsync(`docker compose up -d --project-directory ${workDir} -f ${composeFile}${envFile ? ` --env-file ${envFile}` : ''}`)
+    await execAsync(`docker compose up -d --project-directory ${escapeQuotedArgumentPath(workDir)} -f ${escapeQuotedArgumentPath(composeFile)}${envFile ? ` --env-file ${escapeQuotedArgumentPath(envFile)}` : ''}`)
 
     // Get docker containers and their original compose working directories
     // await execAsync(`docker inspect --format='container name: {{.Name}}, path: {{index (index .Config.Labels "com.docker.compose.project.working_dir")}}' $(docker ps -q)`)
@@ -325,9 +326,9 @@ export class EnvironmentManager {
         await container.stop();
         await container.remove();
       }
-      if(env.composeFile) {
+      if (env.composeFile) {
         const theServices = await getComposeFileServices(env.composeFile)
-        await execAsync(`docker compose down ${env.composeFile}`);
+        await destroyComposeFileServices(env);
       }
       if (this.portForwarder) {
         const portIdentifier = `port_${env.port}`;
@@ -372,6 +373,10 @@ export class EnvironmentManager {
     }
     throw new Error('No available ports');
   }
+}
+
+async function destroyComposeFileServices(env: Environment) {
+  await execAsync(`docker compose down ${env.composeFile}`);
 }
 
 // Express server setup
