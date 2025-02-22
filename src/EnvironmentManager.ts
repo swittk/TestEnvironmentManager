@@ -228,14 +228,13 @@ export class EnvironmentManager {
       );
     }
     // Spin up our stuff
-    await execAsync(`docker compose up -d --project-directory ${escapeQuotedArgumentPath(workDir)} -f ${escapeQuotedArgumentPath(composeFile)}${envFile ? ` --env-file ${escapeQuotedArgumentPath(envFile)}` : ''}`)
+    await upDockerCompose({ workDir, composeFile, envFile });
 
     // Get docker containers and their original compose working directories
     // await execAsync(`docker inspect --format='container name: {{.Name}}, path: {{index (index .Config.Labels "com.docker.compose.project.working_dir")}}' $(docker ps -q)`)
 
     // Get docker containers associated with a original compose directory, and make it json format!
-    const resultingContainersRaw = await execAsync(`docker ps --filter "label=com.docker.compose.project.working_dir=${escapeQuotedArgumentPath(workDir)}" --format '{{ json .}}'`);
-    const resultingContainers = formatDockerJSONOutputString(resultingContainersRaw);
+    const resultingContainers = await getDockerComposeServicesByWorkDir(workDir);
     // console.log('pulling compose...');
     // // Start compose services
     // await compose.pull();
@@ -373,6 +372,18 @@ export class EnvironmentManager {
     }
     throw new Error('No available ports');
   }
+}
+
+async function getDockerComposeServicesByWorkDir(workDir: string) {
+  const resultingContainersRaw = await execAsync(`docker ps --filter "label=com.docker.compose.project.working_dir=${escapeQuotedArgumentPath(workDir)}" --format '{{ json .}}'`);
+  const resultingContainers = formatDockerJSONOutputString(resultingContainersRaw);
+  return resultingContainers;
+}
+
+async function upDockerCompose(args: { workDir?: string, composeFile: string, envFile?: string }) {
+  const { workDir: _workDir, composeFile, envFile } = args;
+  const workDir = _workDir ?? path.dirname(composeFile);
+  await execAsync(`docker compose up -d --project-directory ${escapeQuotedArgumentPath(workDir)} -f ${escapeQuotedArgumentPath(composeFile)}${envFile ? ` --env-file ${escapeQuotedArgumentPath(envFile)}` : ''}`);
 }
 
 async function destroyComposeFileServices(env: Environment) {
