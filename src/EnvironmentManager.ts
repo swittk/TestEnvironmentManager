@@ -9,6 +9,7 @@ import fs from 'fs';
 import os from 'os';
 import { TestEnvironmentConfig, defaultConfig as theDefaultConfig, loadConfig } from './config';
 import { PortForwardingService } from './port-forwarder';
+import { PersistentMap } from './PersistentMap';
 
 function execAsync(cmd: string) {
   return new Promise<string>((resolve, reject) => {
@@ -44,12 +45,13 @@ export interface Environment {
   };
   isCompose?: boolean;
   composeFile?: string;
+  envFile?: string;
   lastAccessed: Date;
   workDir?: string;
 }
 
 export class EnvironmentManager {
-  public environments: Map<string, Environment> = new Map();
+  public environments: Map<string, Environment> = new PersistentMap();
   private docker = new Docker();
   private defaultConfig: TestEnvironmentConfig;
   public portForwarder?: PortForwardingService;
@@ -210,6 +212,9 @@ export class EnvironmentManager {
       fs.writeFileSync(envFilePath, composeConfig.envFileData);
       envFile = envFilePath;
     }
+    env.isCompose = true;
+    env.composeFile = composeFile;
+    env.envFile = envFile;
 
     // const docker = new Docker();
     // Create compose instance
@@ -244,7 +249,6 @@ export class EnvironmentManager {
     // // Get container ID of main service
     // const services = composeUpResults.services;
     // Store all container information
-    env.isCompose = true;
     env.containers = {
       mainService,
       containers: resultingContainers.map((v) => {
