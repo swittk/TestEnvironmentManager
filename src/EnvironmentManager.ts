@@ -7,9 +7,10 @@ import { exec } from 'child_process';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
-import { TestEnvironmentConfig, defaultConfig as theDefaultConfig, loadConfig } from './config';
+import { TestEnvironmentConfig, defaultConfig as theDefaultConfig, loadConfig, ServicePort } from './config';
 import { PortForwardingService } from './port-forwarder';
 import { PersistentMap } from './PersistentMap';
+import yaml from 'js-yaml';
 
 function execAsync(cmd: string) {
   return new Promise<string>((resolve, reject) => {
@@ -26,10 +27,10 @@ export interface Environment {
   id: string;
   branch: string;
   dbSnapshot?: string;
-  port: number;
+  port: number[];
   status: 'starting' | 'ready' | 'error';
-  url: string;
-  externalUrl?: string;
+  url: string | string[];
+  externalUrl?: string | string[];
   // Track both main container and related containers
   /** 
    * Main container for backwards compatibility
@@ -157,15 +158,27 @@ export class EnvironmentManager {
       dbSnapshot,
       port,
       status: 'starting',
-      url: `http://localhost:${port}`,
+      url: Array.isArray(port) ? port.map((p) => { return `http://localhost:${p}` }) : `http://localhost:${port}`,
       lastAccessed: new Date()
     };
 
     // Generate port identifier and register with forwarder
-    const portIdentifier = `port_${env.port}`;
     if (this.portForwarder) {
-      this.portForwarder.registerPort(portIdentifier, env.port);
-      env.externalUrl = this.portForwarder.getUrl(portIdentifier) || env.url;
+      if (Array.isArray(env.port)) {
+        const extUrls: string[] = [];
+        for (let i = 0; i < env.port.length; i++) {
+          const p = env.port[i];
+          const portIdentifier = `port_${env.port}`;
+          this.portForwarder.registerPort(portIdentifier, p);
+          extUrls.push(this.portForwarder.getUrl(portIdentifier) || env.url[i]);
+        }
+        env.externalUrl = extUrls;
+      }
+      else {
+        const portIdentifier = `port_${env.port}`;
+        this.portForwarder.registerPort(portIdentifier, env.port);
+        env.externalUrl = this.portForwarder.getUrl(portIdentifier) || env.url;
+      }
     }
 
     this.environments.set(id, env);
@@ -204,7 +217,7 @@ export class EnvironmentManager {
     const composeConfig = config.docker?.dockerCompose;
     if (!composeConfig) throw new Error("No Docker Compose configuration provided");
 
-    const composeFile = path.resolve(workDir, composeConfig.composeFile || './docker-compose.yml');
+    let composeFile = path.resolve(workDir, composeConfig.composeFile || './docker-compose.yml');
     const mainService = composeConfig.mainService || 'app';
     let envFile: string | undefined;
     if (composeConfig.envFile) {
@@ -215,26 +228,64 @@ export class EnvironmentManager {
       fs.writeFileSync(envFilePath, composeConfig.envFileData);
       envFile = envFilePath;
     }
-    env.isCompose = true;
-    env.composeFile = composeFile;
-    env.envFile = envFile;
 
     // const docker = new Docker();
     // Create compose instance
     // const compose = new DockerCompose(docker, composeFile, mainService);
-    console.log('about to create compose setup for', composeFile, 'at directory', workDir);
     // If a custom template is provided, write it to the compose file
     if (composeConfig.composeTemplate) {
       // Replace template variables
       const template = composeConfig.composeTemplate
         .replace('${PORT}', env.port.toString())
-        .replace('${CONTAINER_PORT}', (config.environment?.containerPort || 3000).toString());
+        .replace('${CONTAINER_PORT}', (config.environment?.port || 3000).toString());
 
+      composeFile = path.join(workDir, composeFile);
       await fs.promises.writeFile(
-        path.join(workDir, composeFile),
+        composeFile,
         template
       );
     }
+
+    // Replace all ports with our needed one
+    const composeContent = fs.readFileSync(composeFile, 'utf-8');
+    const compose = yaml.load(composeContent) as any;
+    // Modify port mappings in the compose file
+    const dockerPortMappings: ServicePort[] =
+      (config.docker?.port != undefined) ?
+        [{ name: 'default', internalPort: 3000 }] : Array.isArray(config.docker?.port) ? config.docker.port : [{ name: 'default', internalPort: config.docker?.port ?? 3000 }]
+    const dockerPortMappingsWithHostPort = dockerPortMappings.map((v, idx) => {
+      if (!env.port[idx]) {
+        throw `No port at index ${idx}`;
+      }
+      return { ...v, hostPort: env.port[idx] };
+    })
+    console.log('modifying compose file ports with mapping', dockerPortMappingsWithHostPort)
+    for (const [serviceName, service] of Object.entries(compose.services)) {
+      // Remove all original `ports` exposure if it isn't one we know.
+      const serviceOriginalPorts = (service as any).ports as string[];
+      if (Array.isArray(serviceOriginalPorts)) {
+        const serviceNewPortsWithNull = serviceOriginalPorts.map((portStr) => {
+          const foundWantedMapping = dockerPortMappingsWithHostPort.find((wantedInternalPort) => {
+            return portStr.includes(`:${wantedInternalPort.internalPort}`);
+          });
+          if (!foundWantedMapping) return null;
+          return `${foundWantedMapping.hostPort}:${foundWantedMapping.internalPort}`;
+        });
+        const serviceNewPorts = serviceNewPortsWithNull.filter((v) => !!v) as string[];
+        (service as any).ports = serviceNewPorts;
+      }
+    }
+    // Write modified compose file
+    const newComposeContent = yaml.dump(compose);
+    await fs.promises.writeFile(
+      path.join(workDir, composeFile),
+      newComposeContent
+    );
+    console.log('wrote new compose file');
+    console.log('about to create compose setup for', composeFile, 'at directory', workDir);
+    env.isCompose = true;
+    env.composeFile = composeFile;
+    env.envFile = envFile;
     // Spin up our stuff
     await upDockerCompose({ workDir, composeFile, envFile });
 
@@ -274,8 +325,7 @@ export class EnvironmentManager {
     config: TestEnvironmentConfig
   ): Promise<void> {
     const imageTag = await this.buildImage(workDir, config);
-    const containerPort = config.environment?.containerPort ?? 3000;
-
+    const containerPort = config.environment?.port ?? 3000;
     const containerEnv = {
       ...config.environment?.serverEnv,
       GIT_BRANCH: env.branch,
@@ -283,6 +333,19 @@ export class EnvironmentManager {
       ...(env.dbSnapshot ? { DB_SNAPSHOT: env.dbSnapshot } : {})
     };
 
+    const ExposedPorts: { [port: string]: {} } = {};
+    const PortBindings: { [port: string]: any[] } = {};
+    if (Array.isArray(containerPort)) {
+      for (let i = 0; i < containerPort.length; i++) {
+        const p = containerPort[i];
+        ExposedPorts[`${p.internalPort}/tcp`] = {}
+        PortBindings[`${p.internalPort}/tcp`] = [{ HostPort: env.port[i] }]
+      }
+    }
+    else {
+      ExposedPorts[`${containerPort}/tcp`] = {}
+      PortBindings[`${containerPort}/tcp`] = [{ HostPort: env.port.toString() }]
+    }
     const container = await this.docker.createContainer({
       Image: imageTag,
       ExposedPorts: {
@@ -337,8 +400,16 @@ export class EnvironmentManager {
         await destroyComposeFileServices(env);
       }
       if (this.portForwarder) {
-        const portIdentifier = `port_${env.port}`;
-        this.portForwarder.removePort(portIdentifier);
+        if (Array.isArray(env.port)) {
+          for (const p of env.port) {
+            const portIdentifier = `port_${p}`;
+            this.portForwarder.removePort(portIdentifier);
+          }
+        }
+        else {
+          const portIdentifier = `port_${env.port}`;
+          this.portForwarder.removePort(portIdentifier);
+        }
       }
       if (env.workDir) {
         await fs.promises.rm(env.workDir, { recursive: true, force: true });
@@ -377,13 +448,24 @@ export class EnvironmentManager {
     }
   }
 
-  private async findAvailablePort(config?: TestEnvironmentConfig): Promise<number> {
+  private async findAvailablePort(config?: TestEnvironmentConfig): Promise<number[]> {
     const { start, end } = config?.environment?.portRange ?? this.defaultConfig.environment!.portRange!;
     // Implementation to find next available port in range
     // You might want to use a port-finder library here
-    const usedPorts = new Set(Array.from(this.environments.values()).map(e => e.port));
+    const numPortsNeeded = Math.round(Math.max(Array.isArray(config?.environment?.port) ? config.environment.port.length : 1, 1));
+    const usedPorts = new Set(Array.from(this.environments.values()).map(e => e.port).flat());
+
+    let ret: number[] = [];
     for (let port = start; port <= end; port++) {
-      if (!usedPorts.has(port)) return port;
+      if (ret.length >= numPortsNeeded) {
+        return ret;
+      }
+      if (!usedPorts.has(port)) {
+        ret.push(port);
+      }
+    }
+    if (ret.length >= numPortsNeeded) {
+      return ret;
     }
     throw new Error('No available ports');
   }

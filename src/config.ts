@@ -36,11 +36,13 @@ export interface GitConfig {
   defaultBranch?: string;
 }
 
-interface ServicePorts {
-  [serviceName: string]: {
-    containerPort: number;
-    hostPort: number;
-  }[];
+export interface ServicePort {
+  name: string;
+  internalPort: number;
+}
+export interface ServicePortMapping extends ServicePort {
+  hostPort: number;
+  url: string;
 }
 
 export interface DockerConfig {
@@ -110,6 +112,8 @@ export interface DockerConfig {
     envFileData?: string;
   };
 
+  /** Default : 3000 */
+  port?: number | ServicePort[];
 
   /**
    * Private registry configuration
@@ -150,7 +154,7 @@ export interface EnvironmentConfig {
    * Example: 3000 for a Node.js server
    * @default 3000
    */
-  containerPort?: number;
+  port?: number | ServicePort[];
 
   /**
    * Maximum number of concurrent test environments
@@ -222,7 +226,7 @@ export const defaultConfig: TestEnvironmentConfig = {
     serverEnv: {
       NODE_ENV: 'test'
     },
-    containerPort: 3000,
+    port: 3000,
     portRange: {
       start: 3000,
       end: 3100
