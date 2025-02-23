@@ -186,6 +186,9 @@ export class EnvironmentManager {
       env.status = 'ready';
     } catch (error) {
       env.status = 'error';
+      console.log(`had an error, cleaning up environment ${env.id}`);
+      await this.cleanupEnvironment(env.id);
+      console.log(`cleaned up environment ${env.id}`);
       console.error(`Failed to create environment: ${error}`);
       throw error;
     }
@@ -398,6 +401,11 @@ async function destroyComposeFileServices(env: Environment) {
 export function createServer(configPath?: string | TestEnvironmentConfig) {
   const app = express();
   const manager = new EnvironmentManager(configPath);
+  const previousEnvironments = manager.environments.entries();
+  for (const [envId, env] of previousEnvironments) {
+    console.log('cleaning up previous environment', envId, 'at path', env.workDir);
+    manager.cleanupEnvironment(envId);
+  }
 
   app.post('/environments', express.json(), async (req, res) => {
     const { branch, dbSnapshot, config } = req.body;
