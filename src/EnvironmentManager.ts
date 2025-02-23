@@ -247,10 +247,11 @@ export class EnvironmentManager {
     // Replace all ports with our needed one
     const composeContent = fs.readFileSync(composeFilePath, 'utf-8');
     const compose = yaml.load(composeContent) as any;
+    const portMapToUse = config.docker?.port ?? config.environment?.port;
     // Modify port mappings in the compose file
     const dockerPortMappings: ServicePort[] =
-      (config.docker?.port != undefined) ?
-        [{ name: 'default', internalPort: 3000 }] : Array.isArray(config.docker?.port) ? config.docker.port : [{ name: 'default', internalPort: config.docker?.port ?? 3000 }]
+      (portMapToUse != undefined) ?
+        [{ name: 'default', internalPort: 3000 }] : Array.isArray(portMapToUse) ? portMapToUse : [{ name: 'default', internalPort: portMapToUse ?? 3000 }]
     const dockerPortMappingsWithHostPort = dockerPortMappings.map((v, idx) => {
       if (!env.port[idx]) {
         throw `No port at index ${idx}`;
