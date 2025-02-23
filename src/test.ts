@@ -15,12 +15,15 @@ async function test() {
       }
     },
     environment: {
-      containerPort: 1337
+      port: [{
+        name: 'backend',
+        internalPort: 1337,
+      }]
     }
   }
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 300000); // 5 minutes to match nginx timeout
+  const timeoutId = setTimeout(() => controller.abort(), 900000); // 15 minutes
   try {
     const res = await fetch('https://testenv.testing.kongdachalert.com/environments', {
       method: 'POST',

@@ -217,7 +217,7 @@ export class EnvironmentManager {
     const composeConfig = config.docker?.dockerCompose;
     if (!composeConfig) throw new Error("No Docker Compose configuration provided");
 
-    let composeFile = path.resolve(workDir, composeConfig.composeFile || './docker-compose.yml');
+    let composeFilePath = path.resolve(workDir, composeConfig.composeFile || './docker-compose.yml');
     const mainService = composeConfig.mainService || 'app';
     let envFile: string | undefined;
     if (composeConfig.envFile) {
@@ -238,16 +238,14 @@ export class EnvironmentManager {
       const template = composeConfig.composeTemplate
         .replace('${PORT}', env.port.toString())
         .replace('${CONTAINER_PORT}', (config.environment?.port || 3000).toString());
-
-      composeFile = path.join(workDir, composeFile);
       await fs.promises.writeFile(
-        composeFile,
+        composeFilePath,
         template
       );
     }
 
     // Replace all ports with our needed one
-    const composeContent = fs.readFileSync(composeFile, 'utf-8');
+    const composeContent = fs.readFileSync(composeFilePath, 'utf-8');
     const compose = yaml.load(composeContent) as any;
     // Modify port mappings in the compose file
     const dockerPortMappings: ServicePort[] =
@@ -278,16 +276,16 @@ export class EnvironmentManager {
     // Write modified compose file
     const newComposeContent = yaml.dump(compose);
     await fs.promises.writeFile(
-      path.join(workDir, composeFile),
+      composeFilePath,
       newComposeContent
     );
     console.log('wrote new compose file');
-    console.log('about to create compose setup for', composeFile, 'at directory', workDir);
+    console.log('about to create compose setup for', composeFilePath, 'at directory', workDir);
     env.isCompose = true;
-    env.composeFile = composeFile;
+    env.composeFile = composeFilePath;
     env.envFile = envFile;
     // Spin up our stuff
-    await upDockerCompose({ workDir, composeFile, envFile });
+    await upDockerCompose({ workDir, composeFile: composeFilePath, envFile });
 
     // Get docker containers and their original compose working directories
     // await execAsync(`docker inspect --format='container name: {{.Name}}, path: {{index (index .Config.Labels "com.docker.compose.project.working_dir")}}' $(docker ps -q)`)
