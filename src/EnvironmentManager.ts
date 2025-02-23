@@ -387,7 +387,7 @@ async function getDockerComposeServicesByWorkDir(workDir: string) {
 async function upDockerCompose(args: { workDir?: string, composeFile: string, envFile?: string }) {
   const { workDir: _workDir, composeFile, envFile } = args;
   const workDir = _workDir ?? path.dirname(composeFile);
-  await execAsync(`docker compose up -d --project-directory ${escapeQuotedArgumentPath(workDir)} -f ${escapeQuotedArgumentPath(composeFile)}${envFile ? ` --env-file ${escapeQuotedArgumentPath(envFile)}` : ''}`);
+  await execAsync(`docker compose up --project-directory ${escapeQuotedArgumentPath(workDir)} -f ${escapeQuotedArgumentPath(composeFile)}${envFile ? ` --env-file ${escapeQuotedArgumentPath(envFile)}` : ''} -d`);
 }
 
 async function destroyComposeFileServices(env: Environment) {
