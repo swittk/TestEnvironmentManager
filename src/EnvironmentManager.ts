@@ -258,7 +258,7 @@ export class EnvironmentManager {
     // Modify port mappings in the compose file
     const dockerPortMappings: ServicePort[] =
       (portMapToUse != undefined) ?
-        [{ name: 'default', internalPort: 3000 }] : Array.isArray(portMapToUse) ? portMapToUse : [{ name: 'default', internalPort: portMapToUse ?? 3000 }]
+        Array.isArray(portMapToUse) ? portMapToUse : [{ name: 'default', internalPort: portMapToUse ?? 3000 }] : [{ name: 'default', internalPort: 3000 }];
     const dockerPortMappingsWithHostPort = dockerPortMappings.map((v, idx) => {
       if (!env.port[idx]) {
         throw `No port at index ${idx}`;
