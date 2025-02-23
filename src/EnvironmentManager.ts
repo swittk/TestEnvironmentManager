@@ -193,9 +193,9 @@ export class EnvironmentManager {
       } else {
         await this.startWithDocker(env.workDir, env, config);
       }
-      console.log('waiting for service to be ready');
+      // console.log('waiting for service to be ready');
       // Wait for service to be ready
-      await this.waitForService(env, config);
+      // await this.waitForService(env, config);
       env.status = 'ready';
     } catch (error) {
       env.status = 'error';

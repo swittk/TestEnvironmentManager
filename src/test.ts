@@ -4,14 +4,14 @@ async function test() {
   const config: TestEnvironmentConfig = {
     git: {
       repoUrl: "https://github.com/foggyhazel/shinebright",
-      defaultBranch: "prescriptionstuff",
+      defaultBranch: "queues",
       auth: {
         sshKeyPath: "~/.ssh/id_rsa"
       }
     },
     docker: {
       dockerCompose: {
-        composeFile: "./docker-compose.yml",
+        composeFile: "./docker-compose-backend.yml",
       }
     },
     environment: {
@@ -32,7 +32,7 @@ async function test() {
       },
       body: JSON.stringify({
         config,
-        branch: "prescriptionstuff",
+        branch: "queues",
       }),
       signal: controller.signal
     })
