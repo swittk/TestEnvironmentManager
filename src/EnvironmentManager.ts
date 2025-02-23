@@ -520,7 +520,7 @@ async function upDockerCompose(args: { workDir?: string, composeFile: string, en
 }
 
 async function destroyComposeFileServices(env: Environment) {
-  await execAsync(`docker compose down -f ${escapeQuotedArgumentPath(env.composeFile!)}`);
+  await execAsync(`docker compose down -f ${escapeQuotedArgumentPath(env.composeFile!)} --volumes --rmi all --remove-orphans`);
 }
 
 // Express server setup
