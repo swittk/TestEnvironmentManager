@@ -16,6 +16,7 @@
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.13.4",
     "child_process": "^1.0.2",
+    "detect-port": "^2.1.0",
     "dockerode": "^4.0.4",
     "dockerode-compose": "^1.4.0",
     "express": "^4.21.2",

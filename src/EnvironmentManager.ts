@@ -11,7 +11,7 @@ import { TestEnvironmentConfig, defaultConfig as theDefaultConfig, loadConfig, S
 import { PortForwardingService } from './port-forwarder';
 import { PersistentMap } from './PersistentMap';
 import yaml from 'js-yaml';
-
+import detectPort from 'detect-port';
 function execAsync(cmd: string) {
   return new Promise<string>((resolve, reject) => {
     exec(cmd, (error, stdout, stderr) => {
@@ -22,6 +22,9 @@ function execAsync(cmd: string) {
   })
 }
 
+interface PortDetectionEntry {
+  timestamp: number;
+}
 
 export interface Environment {
   id: string;
@@ -53,6 +56,10 @@ export interface Environment {
 
 export class EnvironmentManager {
   public environments: Map<string, Environment> = new PersistentMap();
+  private portCache: Map<number, PortDetectionEntry> = new Map();
+  private readonly CACHE_EXPIRATION_MS = 60000; // 1 minute cache expiration
+
+
   private docker = new Docker();
   private defaultConfig: TestEnvironmentConfig;
   public portForwarder?: PortForwardingService;
@@ -205,7 +212,7 @@ export class EnvironmentManager {
       console.error(`Failed to create environment: ${error}`);
       throw error;
     }
-
+    this.environments.set(id, env);
     return env;
   }
 
@@ -455,10 +462,40 @@ export class EnvironmentManager {
     const usedPorts = new Set(Array.from(this.environments.values()).map(e => e.port).flat());
 
     let ret: number[] = [];
-    for (let port = start; port <= end; port++) {
-      if (ret.length >= numPortsNeeded) {
-        return ret;
+    const now = Date.now();
+    for (let port = start; port <= end && ret.length < numPortsNeeded; port++) {
+      // Skip if port is already known to be used by our environments
+      if (usedPorts.has(port)) {
+        continue;
       }
+      // Check cache first
+      const cacheEntry = this.portCache.get(port);
+      if (cacheEntry && (now - cacheEntry.timestamp) < this.CACHE_EXPIRATION_MS) {
+        if (cacheEntry) {
+          ret.push(port);
+        }
+        continue;
+      }
+      // If not in cache or cache expired, check system availability
+      try {
+        const isAvailable = (await detectPort(port) == port);
+
+        if (!isAvailable) {
+          // Update cache
+          this.portCache.set(port, {
+            timestamp: now
+          });
+        }
+        else {
+          ret.push(port);
+        }
+      } catch (error) {
+        console.warn(`Error checking port ${port}:`, error);
+        // Skip this port on error
+        continue;
+      }
+
+
       if (!usedPorts.has(port)) {
         ret.push(port);
       }
