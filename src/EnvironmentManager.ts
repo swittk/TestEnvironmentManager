@@ -180,7 +180,7 @@ export class EnvironmentManager {
       } else {
         await this.startWithDocker(env.workDir, env, config);
       }
-
+      console.log('waiting for service to be ready');
       // Wait for service to be ready
       await this.waitForService(env, config);
       env.status = 'ready';
@@ -346,6 +346,14 @@ export class EnvironmentManager {
     } finally {
       this.environments.delete(id);
     }
+  }
+
+  async cleanupAllEnvironments() {
+    const proms: Promise<any>[] = [];
+    for (const [envid, env] of this.environments) {
+      proms.push(this.cleanupEnvironment(envid));
+    }
+    await Promise.allSettled(proms);
   }
 
   private async cleanupInactiveEnvironments() {

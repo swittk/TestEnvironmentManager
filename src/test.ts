@@ -18,17 +18,26 @@ async function test() {
       containerPort: 1337
     }
   }
-  const res = await fetch('https://testenv.testing.kongdachalert.com/environments', {
-    method: 'POST',
-    headers: {
-      'Content-type': "application/json"
-    },
-    body: JSON.stringify({
-      config,
-      branch: "prescriptionstuff",
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 300000); // 5 minutes to match nginx timeout
+  try {
+    const res = await fetch('https://testenv.testing.kongdachalert.com/environments', {
+      method: 'POST',
+      headers: {
+        'Content-type': "application/json"
+      },
+      body: JSON.stringify({
+        config,
+        branch: "prescriptionstuff",
+      }),
+      signal: controller.signal
     })
-  })
-  const restext = await res.text();
-  console.log('spun up results', restext)
+    const restext = await res.text();
+    console.log('spun up results', restext)
+    clearTimeout(timeoutId);
+  } catch (e) {
+    clearTimeout(timeoutId);
+  }
 }
 test();

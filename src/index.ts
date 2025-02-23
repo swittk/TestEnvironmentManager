@@ -25,6 +25,20 @@ async function main() {
     console.log(`Environment manager listening on port ${port}`);
     console.log(`Using configuration from ${configPath}`);
   });
+  async function shutdown(signal: string) {
+    console.log(`\nReceived ${signal}, cleaning up...`);
+    try {
+      await manager.cleanupAllEnvironments();
+      console.log('All environments cleaned up successfully');
+      process.exit(0);
+    } catch (error) {
+      console.error('Error during cleanup:', error);
+      process.exit(1);
+    }
+  }
+
+  process.on('SIGINT', () => shutdown('SIGINT')); // Ctrl+C
+  process.on('SIGTERM', () => shutdown('SIGTERM')); // kill command
 
 }
 // Start server
