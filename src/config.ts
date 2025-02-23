@@ -36,6 +36,13 @@ export interface GitConfig {
   defaultBranch?: string;
 }
 
+interface ServicePorts {
+  [serviceName: string]: {
+    containerPort: number;
+    hostPort: number;
+  }[];
+}
+
 export interface DockerConfig {
   /**
    * Configuration for building a custom Docker image
