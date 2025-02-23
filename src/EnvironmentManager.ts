@@ -478,7 +478,7 @@ export class EnvironmentManager {
       }
       // If not in cache or cache expired, check system availability
       try {
-        const isAvailable = (await detectPort(port) == port);
+        const isAvailable = ((await detectPort(port)) == port);
 
         if (!isAvailable) {
           // Update cache
@@ -487,17 +487,14 @@ export class EnvironmentManager {
           });
         }
         else {
-          ret.push(port);
+          if (!usedPorts.has(port)) {
+            ret.push(port);
+          }
         }
       } catch (error) {
         console.warn(`Error checking port ${port}:`, error);
         // Skip this port on error
         continue;
-      }
-
-
-      if (!usedPorts.has(port)) {
-        ret.push(port);
       }
     }
     if (ret.length >= numPortsNeeded) {
