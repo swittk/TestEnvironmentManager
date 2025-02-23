@@ -269,15 +269,18 @@ export class EnvironmentManager {
     for (const [serviceName, service] of Object.entries(compose.services)) {
       // Remove all original `ports` exposure if it isn't one we know.
       const serviceOriginalPorts = (service as any).ports as string[];
+      console.log('Original ports:', serviceOriginalPorts);
       if (Array.isArray(serviceOriginalPorts)) {
         const serviceNewPortsWithNull = serviceOriginalPorts.map((portStr) => {
           const foundWantedMapping = dockerPortMappingsWithHostPort.find((wantedInternalPort) => {
             return portStr.includes(`:${wantedInternalPort.internalPort}`);
           });
+          console.log(`Checking port string ${portStr}`, foundWantedMapping);
           if (!foundWantedMapping) return null;
           return `${foundWantedMapping.hostPort}:${foundWantedMapping.internalPort}`;
         });
         const serviceNewPorts = serviceNewPortsWithNull.filter((v) => !!v) as string[];
+        console.log(`New ports for ${serviceName}:`, serviceNewPorts);
         (service as any).ports = serviceNewPorts;
       }
     }
