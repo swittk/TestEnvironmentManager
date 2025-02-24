@@ -201,10 +201,21 @@ export interface EnvironmentConfig {
   };
 }
 
+interface FileData {
+  content?: string; // The file content as a string (plain text or base64 encoded)
+  encoding?: 'utf8' | 'base64';
+  checksum?: string; // the md5 checksum of the file (used when we upload it prior to this)
+}
+
 export interface TestEnvironmentConfig {
   git?: GitConfig;
   docker?: DockerConfig;
   environment?: EnvironmentConfig;
+  /** 
+   * Additional files to be placed in the build folder
+   * e.g. init scripts for your database or for mongo, your database b64 encoded, etc
+   */
+  additionalFiles?: { [key: string]: FileData | string }
 }
 
 /**
