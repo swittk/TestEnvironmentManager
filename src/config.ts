@@ -214,8 +214,9 @@ export interface TestEnvironmentConfig {
   /** 
    * Additional files to be placed in the build folder
    * e.g. init scripts for your database or for mongo, your database b64 encoded, etc
+   * If it's a string, it is a plain text!
    */
-  additionalFiles?: { [key: string]: FileData | string }
+  additionalFiles?: { [filePath: string]: FileData | string }
 }
 
 /**

@@ -12,6 +12,9 @@ import { PortForwardingService } from './port-forwarder';
 import { PersistentMap } from './PersistentMap';
 import yaml from 'js-yaml';
 import detectPort from 'detect-port';
+import { EphemeralUploadManager } from './EphemeralUploadManager';
+import busboy from 'busboy';
+
 function execAsync(cmd: string) {
   return new Promise<string>((resolve, reject) => {
     exec(cmd, (error, stdout, stderr) => {
@@ -64,6 +67,8 @@ export class EnvironmentManager {
   private defaultConfig: TestEnvironmentConfig;
   public portForwarder?: PortForwardingService;
 
+  public ephemeralUploads = new EphemeralUploadManager();
+
   constructor(configPath?: string | TestEnvironmentConfig) {
     this.defaultConfig = loadConfig(configPath);
     const externalDomain = this.defaultConfig.environment?.externalDomain;
@@ -110,6 +115,55 @@ export class EnvironmentManager {
       await execAsync(`cd ${workDir} && git checkout ${branch}`);
     }
     return workDir;
+  }
+
+  private async setupAdditionalFiles(workDir: string, config: TestEnvironmentConfig) {
+    if (!config.additionalFiles) {
+      return;
+    }
+    const allProms: Promise<void>[] = [];
+    for (const requestFilePath in config.additionalFiles) {
+      const filePath = path.resolve(workDir, requestFilePath);
+      const fileConfig = config.additionalFiles[requestFilePath];
+      const loopProm = async () => {
+        if (typeof fileConfig == 'string') {
+          // If it is string, it is plain text!
+          await fs.promises.writeFile(filePath, fileConfig);
+        }
+        else {
+          if (fileConfig.content) {
+            // If there is content, we just write
+            if (fileConfig.encoding == 'base64') {
+              const bufferToWrite = Buffer.from(fileConfig.content, 'base64');
+              await fs.promises.writeFile(filePath, bufferToWrite);
+            }
+            else {
+              // Otherwise just UTF-8
+              await fs.promises.writeFile(filePath, fileConfig.content, 'utf-8');
+            }
+          }
+          else {
+            // There is NO content; it should be pre-uploaded!
+            if (!fileConfig.checksum) {
+              throw 'No content or checksum provided';
+            }
+            const existing = this.ephemeralUploads.getUpload(fileConfig.checksum);
+            if (!existing) {
+              throw `No existing uploads with the MD5 ${fileConfig.checksum}`;
+            }
+            else if (!existing.filePath) {
+              throw `No existing filePath with the MD5 ${fileConfig.checksum}`;
+            }
+            else {
+              // Copy to the needed path!
+              await fs.promises.cp(existing.filePath, filePath);
+            }
+          }
+        }
+      }
+      allProms.push(loopProm());
+    }
+    await Promise.all(allProms);
   }
 
   private async buildImage(workDir: string, config: TestEnvironmentConfig): Promise<string> {
@@ -192,8 +246,11 @@ export class EnvironmentManager {
 
     try {
       // Clone repository
-      env.workDir = await this.cloneRepo(branch, config);
+      const workDir = await this.cloneRepo(branch, config);
+      env.workDir = workDir;
+      this.environments.set(id, env); // Update in our cache... it saves!
 
+      await this.setupAdditionalFiles(env.workDir, config);
       // Start container(s) based on configuration
       if (config.docker?.dockerCompose) {
         await this.startWithDockerCompose(env.workDir, env, config);
@@ -571,6 +628,118 @@ export function createServer(configPath?: string | TestEnvironmentConfig) {
       res.status(500).json({ error: 'Failed to cleanup environment' });
     }
   });
+
+  // Endpoint to initiate an upload
+  app.post('/uploads/initiate', express.json({ limit: '5mb' }), async (req, res) => {
+    const { md5, fileName, fileSize } = req.body;
+    if (!md5) {
+      res.status(400).json({ error: 'Missing md5' });
+      return;
+    }
+    const existing = manager.ephemeralUploads.initiateUpload(md5, fileName, fileSize);
+    res.json(existing);
+  });
+
+  // Endpoint to perform the actual file upload
+  // Expecting file data as a Base64 encoded string in the JSON body
+  app.post('/uploads/:token', async (req, res) => {
+    const token = req.params.token;
+    if (!token) {
+      res.status(400).json({ error: 'Token is required' });
+      return;
+    }
+
+    // Create busboy instance configured from the request headers
+    const bb = busboy({ headers: req.headers });
+
+    // Flag to track if we've handled a file
+    let fileHandled = false;
+
+    // Handle file field - this is called when a file part is encountered
+    bb.on('file', async (fieldname, fileStream, filename, encoding, mimetype) => {
+      // We only want to process the 'file' field
+      if (fieldname !== 'file') {
+        fileStream.resume(); // Skip this field
+        return;
+      }
+
+      // Mark that we're handling a file
+      fileHandled = true;
+
+      try {
+        // Stream the file directly to our upload manager
+        const result = await manager.ephemeralUploads.handleFileUpload(token, fileStream);
+        res.status(200).json(result);
+      } catch (error) {
+        // Handle errors during streaming
+        res.status(400).json({ error: error.message });
+      }
+    });
+
+    // Handle errors from busboy
+    bb.on('error', (error) => {
+      res.status(400).json({ error: `Parse error: ${(error as any).message}` });
+    });
+    // Handle the end of the request
+    bb.on('finish', () => {
+      // If no file was processed, send an error
+      if (!fileHandled) {
+        res.status(400).json({ error: 'No file was uploaded' });
+      }
+    });
+
+    // Pipe the request to busboy
+    req.pipe(bb);
+  });
+
+  app.post('/uploads-base64/:token', express.json({ limit: '500mb' }), async (req, res) => {
+    const token = req.params.token;
+    const { fileData } = req.body;
+    if (!fileData) {
+      res.status(400).json({ error: 'Missing fileData' });
+      return;
+    }
+    try {
+      const uploadEntry = await manager.ephemeralUploads.handleFileUploadBase64(token, fileData);
+      res.status(200).json({ success: true, token, md5: uploadEntry.md5 });
+      return;
+    }
+    catch (e) {
+      res.status(400).json({ error: e?.message ?? e?.code ?? e });
+      return;
+    }
+  });
+
+  // For handling base64 data streams
+  // app.post('/api/upload-base64/:token', express.text({ limit: '50mb' }), async (req, res) => {
+  //   const { token } = req.params;
+
+  //   if (!token) {
+  //     return res.status(400).json({ error: 'Token is required' });
+  //   }
+
+  //   const base64Data = req.body;
+
+  //   if (!base64Data) {
+  //     return res.status(400).json({ error: 'Base64 data is required' });
+  //   }
+
+  //   try {
+  //     // Create a readable stream from the base64 string
+  //     const { Readable } = require('stream');
+  //     const dataStream = new Readable();
+
+  //     // Push the data to the stream and signal the end
+  //     dataStream.push(base64Data);
+  //     dataStream.push(null);
+
+  //     // Process the stream with our upload manager
+  //     const result = await uploadManager.handleBase64UploadStream(token, dataStream);
+  //     res.status(200).json(result);
+  //   } catch (error) {
+  //     res.status(400).json({ error: error.message });
+  //   }
+  // });
 
   return { app, manager };
 }
