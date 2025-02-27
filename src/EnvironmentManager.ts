@@ -119,6 +119,7 @@ export class EnvironmentManager {
 
   private async setupAdditionalFiles(workDir: string, config: TestEnvironmentConfig) {
     if (!config.additionalFiles) {
+      console.log('no additional files to setup')
       return;
     }
     const allProms: Promise<void>[] = [];
@@ -126,6 +127,12 @@ export class EnvironmentManager {
       const filePath = path.resolve(workDir, requestFilePath);
       const fileConfig = config.additionalFiles[requestFilePath];
       const loopProm = async () => {
+        // Extract directory path
+        const dir = path.dirname(filePath);
+
+        // Ensure directory exists
+        await fs.promises.mkdir(dir, { recursive: true });
+        
         if (typeof fileConfig == 'string') {
           // If it is string, it is plain text!
           await fs.promises.writeFile(filePath, fileConfig);

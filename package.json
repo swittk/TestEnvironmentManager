@@ -26,6 +26,7 @@
     "http-proxy-middleware": "^3.0.3",
     "js-yaml": "^4.1.0",
     "lmdb": "^3.2.6",
+    "node-fetch": "^3.3.2",
     "tsx": "^4.19.2",
     "uuid": "^11.0.5"
   }
