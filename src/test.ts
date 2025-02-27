@@ -50,8 +50,9 @@ async function test() {
     docker: {
       dockerCompose: {
         composeFile: "./docker-compose-backend.yml",
-        //         envFileData: `MONGO_INIT_SOURCE="./mongo-init/"
-        // MONGO_DUMP_SOURCE="./mongo-dump/"`
+        envFileData:
+          `MONGO_INIT_SOURCE="./mongo-init/"
+MONGO_DUMP_SOURCE="./mongo-dump/"`
       },
     },
     environment: {
@@ -110,11 +111,13 @@ async function test() {
       formData.append('file',
         fileStream
       );
-      const uploadRes = await (await nodefetch(`${API_BASE_URL}/uploads/${tryUpload.token}`, {
+      const uploadResText = await (await nodefetch(`${API_BASE_URL}/uploads/${tryUpload.token}`, {
         method: 'POST',
         body: formData,
         headers: formData.getHeaders()
-      })).json() as EphemeralUpload | { error: string }
+      })).text();
+      console.log('uploadRes is', uploadResText)
+      const uploadRes = JSON.parse(uploadResText) as EphemeralUpload | { error: string };
       if ('error' in uploadRes) {
         console.log('file', fileToUpload, 'failed to upload');
         throw uploadRes.error;

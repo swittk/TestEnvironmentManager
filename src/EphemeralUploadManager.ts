@@ -48,7 +48,13 @@ export class EphemeralUploadManager {
     // Check if a file with this MD5 is already cached
     const existing = this.uploads.get(md5);
     if (existing) {
-      return { exists: true, token: existing.token };
+      // If it's still in uploadTokens, then it's not been used for uploading yet!
+      if (this.uploadTokens.has(existing.token)) {
+        return { exists: false, token: existing.token };
+      }
+      else {
+        return { exists: true, token: existing.token };
+      }
     }
     // Generate new token and add entry
     const token = uuidv4();
