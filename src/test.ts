@@ -22,7 +22,10 @@ async function test() {
       port: [{
         name: 'backend',
         internalPort: 1337,
-      }]
+      }],
+    },
+    additionalFiles: {
+      [dockerMongoInitScript.filePath]: dockerMongoInitScript.fileData
     }
   }
   // const fileStream = new FormData();
@@ -33,7 +36,7 @@ async function test() {
   const API_BASE_URL = process.env.API_BASE_URL;
   if (!API_BASE_URL) throw "No API URL";
   try {
-    const fileToUpload = 'myfile.txt';
+    const fileToUpload = 'dump2025.dump';
 
     const md5 = await createMD5(fileToUpload);
     type TryUploadBodyType = {
@@ -76,6 +79,11 @@ async function test() {
         throw uploadRes.error;
       }
       // Upload done yay.
+      config.additionalFiles!['./mongo-dump/db.dump'] = {
+        // content?: string; // The file content as a string (plain text or base64 encoded)
+        // encoding?: 'utf8' | 'base64';
+        checksum: md5 // the md5 checksum of the file (used when we upload it prior to this)
+      }
     }
 
     const res = await fetch(`${API_BASE_URL}/environments`, {
@@ -98,3 +106,34 @@ async function test() {
   }
 }
 test();
+
+const dockerMongoInitScript = {
+  filePath: './mongo-init',
+  fileData: `#!/bin/bash
+set -e
+
+# Initialize MongoDB if database is empty
+if [ -z "$(ls -A /data/db 2>/dev/null | grep -v 'lost+found')" ] || [ ! -f "/data/db/.initialized" ]; then
+  echo "Database appears to be empty, checking for dump files..."
+  
+  # Find any .dump or archive files in the /dump directory
+  DUMP_FILE=$(find /dump -type f -name "*.dump" -o -name "db.dump" -o -name "*.archive" | head -n 1)
+  
+  if [ -n "$DUMP_FILE" ]; then
+    echo "Found dump file: $DUMP_FILE"
+    echo "Restoring database from archive dump..."
+    
+    # Restore from the archive dump - this works for both named and unnamed databases
+    mongorestore --archive=$DUMP_FILE --gzip
+    
+    # Mark as initialized to prevent running again
+    touch /data/db/.initialized
+    echo "Database restore completed successfully."
+  else
+    echo "No MongoDB dump archives found in /dump directory. Starting with empty database."
+    touch /data/db/.initialized
+  fi
+else
+  echo "Database already contains data, skipping restore."
+fi`
+}

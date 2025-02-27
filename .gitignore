@@ -10,6 +10,8 @@ npm-debug.*
 *.orig.*
 web-build/
 
+*/**/dump*.dump
+
 # macOS
 .DS_Store
 persistent_map
