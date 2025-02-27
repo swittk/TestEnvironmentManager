@@ -130,9 +130,10 @@ export class EnvironmentManager {
         // Extract directory path
         const dir = path.dirname(filePath);
 
+        console.log('ensuring file path exists: ', dir);
         // Ensure directory exists
         await fs.promises.mkdir(dir, { recursive: true });
-        
+
         if (typeof fileConfig == 'string') {
           // If it is string, it is plain text!
           await fs.promises.writeFile(filePath, fileConfig);
