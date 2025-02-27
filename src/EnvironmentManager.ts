@@ -167,6 +167,10 @@ export class EnvironmentManager {
               await fs.promises.cp(existing.filePath, filePath);
             }
           }
+          if (fileConfig.mode) {
+            console.log('changing file mode to', fileConfig.mode, 'for', filePath);
+            await fs.promises.chmod(filePath, parseInt(fileConfig.mode, 8));
+          }
         }
       }
       allProms.push(loopProm());

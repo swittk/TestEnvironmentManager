@@ -63,7 +63,10 @@ MONGO_DUMP_SOURCE="./mongo-dump/"`
       }],
     },
     additionalFiles: {
-      [dockerMongoInitScript.filePath]: dockerMongoInitScript.fileData
+      [dockerMongoInitScript.filePath]: {
+        content: dockerMongoInitScript.fileData,
+        mode: '755'
+      }
     }
   }
   // const fileStream = new FormData();

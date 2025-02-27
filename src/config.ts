@@ -205,6 +205,8 @@ interface FileData {
   content?: string; // The file content as a string (plain text or base64 encoded)
   encoding?: 'utf8' | 'base64';
   checksum?: string; // the md5 checksum of the file (used when we upload it prior to this)
+  /** The file mode (e.g. 755) */
+  mode?: string
 }
 
 export interface TestEnvironmentConfig {
