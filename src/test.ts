@@ -8,7 +8,7 @@ import nodefetch from 'node-fetch';
 
 
 const dockerMongoInitScript = {
-  filePath: './mongo-init',
+  filePath: './mongo-init/init-db.sh',
   fileData: `#!/bin/bash
 set -e
 
@@ -17,14 +17,15 @@ if [ -z "$(ls -A /data/db 2>/dev/null | grep -v 'lost+found')" ] || [ ! -f "/dat
   echo "Database appears to be empty, checking for dump files..."
   
   # Find any .dump or archive files in the /dump directory
-  DUMP_FILE=$(find /dump -type f -name "*.dump" -o -name "db.dump" -o -name "*.archive" | head -n 1)
-  
+  # DUMP_FILE=$(find /dump -type f -name "*.dump" -o -name "db.dump" -o -name "*.archive" | head -n 1)
+  DUMP_FILE=$(ls /dump/*.dump /dump/db.dump /dump/*.archive 2>/dev/null | head -n 1)
+
   if [ -n "$DUMP_FILE" ]; then
     echo "Found dump file: $DUMP_FILE"
     echo "Restoring database from archive dump..."
     
     # Restore from the archive dump - this works for both named and unnamed databases
-    mongorestore --archive=$DUMP_FILE --gzip
+    mongorestore --archive=$DUMP_FILE
     
     # Mark as initialized to prevent running again
     touch /data/db/.initialized
