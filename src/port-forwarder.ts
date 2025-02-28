@@ -1,5 +1,5 @@
 // port-forwarder.ts
-import express from 'express';
+import express, { RequestHandler } from 'express';
 import { createProxyMiddleware } from 'http-proxy-middleware';
 // import { URL } from 'url';
 
@@ -11,6 +11,8 @@ interface PortMapping {
 export class PortForwardingService {
   private portMappings = new Map<string, PortMapping>();
   public staticMappings = new Map<string, PortMapping>();
+  private proxyCache = new Map<number, RequestHandler>(); // Cache for proxies
+
   constructor(
     private baseHostname: string = 'testing.mysite.com',
     private cleanupInterval: number = 3600000 // 1 hour
@@ -44,14 +46,23 @@ export class PortForwardingService {
         const mapping = this.staticMappings.get(portIdentifier)!;
         // Update last accessed time
         mapping.lastAccessed = new Date();
-        // Create proxy to forward request to correct port
-        const proxy = createProxyMiddleware({
-          target: `http://localhost:${mapping.port}`,
-          changeOrigin: true,
-          ws: true, // Enable WebSocket proxy
-          xfwd: true // Forward original headers
-        });
-
+        let proxy: RequestHandler;
+        if (!this.proxyCache.has(mapping.port)) {
+          // Create proxy to forward request to correct port
+          proxy = createProxyMiddleware({
+            target: `http://localhost:${mapping.port}`,
+            changeOrigin: true,
+            ws: true, // Enable WebSocket proxy
+            xfwd: true // Forward original headers
+          });
+          this.proxyCache.set(
+            mapping.port,
+            proxy
+          );
+        }
+        else {
+          proxy = this.proxyCache.get(mapping.port)!;
+        }
         return proxy(req, res, next);
       }
       if (!portIdentifier.startsWith('port_')) {
@@ -114,6 +125,7 @@ export class PortForwardingService {
     for (const [identifier, mapping] of this.portMappings.entries()) {
       if (now.getTime() - mapping.lastAccessed.getTime() > this.cleanupInterval) {
         this.portMappings.delete(identifier);
+        this.proxyCache.delete(mapping.port); // Remove proxy from cache
       }
     }
   }
