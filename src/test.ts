@@ -10,32 +10,25 @@ import nodefetch from 'node-fetch';
 const dockerMongoInitScript = {
   filePath: './mongo-init/init-db.sh',
   fileData: `#!/bin/bash
-set -e
+echo "Mongo init script is called yahoo"
+echo "Dump dir contents:"
+ls -la /dump
+echo "Database appears to be empty, checking for dump files..."
 
-# Initialize MongoDB if database is empty
-if [ -z "$(ls -A /data/db 2>/dev/null | grep -v 'lost+found')" ] || [ ! -f "/data/db/.initialized" ]; then
-  echo "Database appears to be empty, checking for dump files..."
-  
-  # Find any .dump or archive files in the /dump directory
-  # DUMP_FILE=$(find /dump -type f -name "*.dump" -o -name "db.dump" -o -name "*.archive" | head -n 1)
-  DUMP_FILE=$(ls /dump/*.dump /dump/db.dump /dump/*.archive 2>/dev/null | head -n 1)
+# Find any .dump or archive files in the /dump directory
+# DUMP_FILE=$(find /dump -type f -name "*.dump" -o -name "db.dump" -o -name "*.archive" | head -n 1)
+DUMP_FILE=$(ls /dump | grep -E '\.dump$|\.archive$|^db\.dump$' | head -n 1)
 
-  if [ -n "$DUMP_FILE" ]; then
-    echo "Found dump file: $DUMP_FILE"
-    echo "Restoring database from archive dump..."
-    
-    # Restore from the archive dump - this works for both named and unnamed databases
-    mongorestore --archive=$DUMP_FILE
-    
-    # Mark as initialized to prevent running again
-    touch /data/db/.initialized
-    echo "Database restore completed successfully."
-  else
-    echo "No MongoDB dump archives found in /dump directory. Starting with empty database."
-    touch /data/db/.initialized
-  fi
+if [ -n "$DUMP_FILE" ]; then
+  echo "Restoring database from archive dump..."
+  # Restore from the archive dump - this works for both named and unnamed databases
+  mongorestore --drop --archive=/dump/$DUMP_FILE
+  # Mark as initialized to prevent running again
+  echo "Mongorestore completed, about to touch file"
+  touch /data/db/.initialized
+  echo "Database restore completed successfully."
 else
-  echo "Database already contains data, skipping restore."
+  echo "No MongoDB dump archives found in /dump directory. Starting with empty database."
 fi`
 }
 
