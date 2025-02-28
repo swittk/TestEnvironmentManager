@@ -492,6 +492,8 @@ export class EnvironmentManager {
       if (env.workDir) {
         await fs.promises.rm(env.workDir, { recursive: true, force: true });
       }
+    } catch(e) {
+      console.error(`Error cleaning up environment`, e);
     } finally {
       this.environments.delete(id);
     }

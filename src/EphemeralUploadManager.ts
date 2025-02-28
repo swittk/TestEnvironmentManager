@@ -32,15 +32,15 @@ export class EphemeralUploadManager {
     this.cleanupInterval = setInterval(() => this.purgeExpiredUploads(), 60000);
 
     // Register cleanup hooks on exit signals
-    process.on('exit', () => this.cleanup());
-    process.on('SIGINT', () => {
-      this.cleanup();
-      process.exit();
-    });
-    process.on('SIGTERM', () => {
-      this.cleanup();
-      process.exit();
-    });
+    // process.on('exit', () => this.cleanup());
+    // process.on('SIGINT', () => {
+    //   this.cleanup();
+    //   process.exit();
+    // });
+    // process.on('SIGTERM', () => {
+    //   this.cleanup();
+    //   process.exit();
+    // });
   }
 
   public initiateUpload(md5: string, fileName?: string, fileSize?: number): { exists: boolean, token: string } {
@@ -166,7 +166,9 @@ export class EphemeralUploadManager {
       }
     }
     try {
-      fs.rmdirSync(this.uploadsDir);
+      if (fs.existsSync(this.uploadsDir)) {
+        fs.rmdirSync(this.uploadsDir);
+      }
     } catch (err) {
       console.error(`Failed to remove uploads directory ${this.uploadsDir}:`, err);
     }

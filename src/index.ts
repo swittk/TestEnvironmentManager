@@ -28,6 +28,10 @@ async function main() {
   async function shutdown(signal: string) {
     console.log(`\nReceived ${signal}, cleaning up...`);
     try {
+      console.log('cleaning up ephemeral uploads');
+      manager.ephemeralUploads.cleanup();
+      console.log('cleaned up ephemeral uploads');
+      console.log('cleaning up environments')
       await manager.cleanupAllEnvironments();
       console.log('All environments cleaned up successfully');
       process.exit(0);
