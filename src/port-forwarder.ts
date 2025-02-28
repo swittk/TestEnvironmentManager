@@ -46,23 +46,7 @@ export class PortForwardingService {
         const mapping = this.staticMappings.get(portIdentifier)!;
         // Update last accessed time
         mapping.lastAccessed = new Date();
-        let proxy: RequestHandler;
-        if (!this.proxyCache.has(mapping.port)) {
-          // Create proxy to forward request to correct port
-          proxy = createProxyMiddleware({
-            target: `http://localhost:${mapping.port}`,
-            changeOrigin: true,
-            ws: true, // Enable WebSocket proxy
-            xfwd: true // Forward original headers
-          });
-          this.proxyCache.set(
-            mapping.port,
-            proxy
-          );
-        }
-        else {
-          proxy = this.proxyCache.get(mapping.port)!;
-        }
+        const proxy = this.getOrCreateProxy(mapping.port);
         return proxy(req, res, next);
       }
       if (!portIdentifier.startsWith('port_')) {
@@ -80,12 +64,7 @@ export class PortForwardingService {
       mapping.lastAccessed = new Date();
 
       // Create proxy to forward request to correct port
-      const proxy = createProxyMiddleware({
-        target: `http://localhost:${mapping.port}`,
-        changeOrigin: true,
-        ws: true, // Enable WebSocket proxy
-        xfwd: true // Forward original headers
-      });
+      const proxy = this.getOrCreateProxy(mapping.port);
 
       return proxy(req, res, next);
     });
@@ -127,6 +106,30 @@ export class PortForwardingService {
         this.portMappings.delete(identifier);
         this.proxyCache.delete(mapping.port); // Remove proxy from cache
       }
+    }
+  }
+
+  // Helper method to get or create a proxy
+  private getOrCreateProxy(port: number): RequestHandler {
+    if (!this.proxyCache.has(port)) {
+      // Create proxy to forward request to correct port
+      const proxy = createProxyMiddleware({
+        target: `http://localhost:${port}`,
+        changeOrigin: true,
+        ws: true, // Enable WebSocket proxy
+        xfwd: true, // Forward original headers
+        // Set higher max listeners on the proxy
+        // onProxyRes: (proxyRes) => {
+        //   proxyRes.setMaxListeners(50);
+        // },
+        // onProxyReq: (proxyReq) => {
+        //   proxyReq.setMaxListeners(50);
+        // }
+      });
+      this.proxyCache.set(port, proxy);
+      return proxy;
+    } else {
+      return this.proxyCache.get(port)!;
     }
   }
 }
