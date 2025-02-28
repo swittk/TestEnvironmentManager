@@ -14,6 +14,7 @@ import yaml from 'js-yaml';
 import detectPort from 'detect-port';
 import { EphemeralUploadManager } from './EphemeralUploadManager';
 import busboy from 'busboy';
+import crypto from 'crypto';
 
 function execAsync(cmd: string) {
   return new Promise<string>((resolve, reject) => {
@@ -57,6 +58,13 @@ export interface Environment {
   workDir?: string;
 }
 
+interface KnownFileEntry {
+  filePath: string;
+  fileName: string;
+  fileSize: number;
+  md5: string;
+}
+
 export class EnvironmentManager {
   public environments: Map<string, Environment> = new PersistentMap();
   private portCache: Map<number, PortDetectionEntry> = new Map();
@@ -68,6 +76,10 @@ export class EnvironmentManager {
   public portForwarder?: PortForwardingService;
 
   public ephemeralUploads = new EphemeralUploadManager();
+  // Map to store known files by MD5 hash
+  // Initialize known files directory if environment variable is set
+  public knownFilesMap: Map<string, KnownFileEntry> = initializeKnownFilesDir(process.env.KNOWN_FILES_DIR);
+
 
   constructor(configPath?: string | TestEnvironmentConfig) {
     this.defaultConfig = loadConfig(configPath);
@@ -155,7 +167,11 @@ export class EnvironmentManager {
             if (!fileConfig.checksum) {
               throw 'No content or checksum provided';
             }
-            const existing = this.ephemeralUploads.getUpload(fileConfig.checksum);
+            let existing: { md5: string, filePath?: string } | undefined = this.ephemeralUploads.getUpload(fileConfig.checksum);
+            if(!existing) {
+              // try in cache first
+              existing = this.knownFilesMap.get(fileConfig.checksum);
+            }
             if (!existing) {
               throw `No existing uploads with the MD5 ${fileConfig.checksum}`;
             }
@@ -492,7 +508,7 @@ export class EnvironmentManager {
       if (env.workDir) {
         await fs.promises.rm(env.workDir, { recursive: true, force: true });
       }
-    } catch(e) {
+    } catch (e) {
       console.error(`Error cleaning up environment`, e);
     } finally {
       this.environments.delete(id);
@@ -650,6 +666,10 @@ export function createServer(configPath?: string | TestEnvironmentConfig) {
       res.status(400).json({ error: 'Missing md5' });
       return;
     }
+    if (manager.knownFilesMap.has(md5)) {
+      res.json({ exists: true, token: undefined });
+      return;
+    }
     const existing = manager.ephemeralUploads.initiateUpload(md5, fileName, fileSize);
     res.json(existing);
   });
@@ -798,4 +818,60 @@ function formatDockerJSONOutputString(rawOutput: string): DockerPsEntry[] {
 async function getComposeFileServices(composePath: string) {
   const res = await execAsync(`docker ps --filter "label=com.docker.compose.project.config_files=${escapeQuotedArgumentPath(composePath)}" --format '{{json .}}'`);
   return formatDockerJSONOutputString(res);
+}
+
+// Gets all known files from directory in env variable ()
+function initializeKnownFilesDir(dir?: string) {
+  const knownFilesMap: Map<string, KnownFileEntry> = new Map();
+  const knownFilesDir = dir;
+  if (!knownFilesDir) {
+    return knownFilesMap;
+  }
+
+  try {
+    // Check if the directory exists
+    const dirStats = fs.statSync(knownFilesDir);
+    if (!dirStats.isDirectory()) {
+      console.error(`KNOWN_FILES_DIR (${knownFilesDir}) is not a directory.`);
+      return knownFilesMap;
+    }
+
+    console.log(`Initializing known files from directory: ${knownFilesDir}`);
+
+    // Read files in the directory
+    const files = fs.readdirSync(knownFilesDir);
+
+    // Process each file
+    for (const fileName of files) {
+      const filePath = path.join(knownFilesDir, fileName);
+
+      // Skip directories
+      const stats = fs.statSync(filePath);
+      if (stats.isDirectory()) continue;
+
+      try {
+        // Calculate MD5 hash of the file
+        const fileBuffer = fs.readFileSync(filePath);
+
+        const md5Hash = crypto.createHash('md5').update(fileBuffer).digest('hex');
+
+        // Store file info in the map
+        knownFilesMap.set(md5Hash, {
+          filePath,
+          fileName,
+          fileSize: stats.size,
+          md5: md5Hash
+        });
+
+        console.log(`Added known file: ${fileName}, MD5: ${md5Hash}`);
+      } catch (error) {
+        console.error(`Error processing file ${filePath}:`, error);
+      }
+    }
+
+    console.log(`Initialized ${knownFilesMap.size} known files from ${knownFilesDir}`);
+  } catch (error) {
+    console.error(`Error initializing known files directory:`, error);
+  }
+  return knownFilesMap;
 }
