@@ -595,7 +595,7 @@ export class EnvironmentManager {
 }
 
 async function getDockerComposeServicesByWorkDir(workDir: string) {
-  const resultingContainersRaw = await execAsync(`docker ps --filter "label=com.docker.compose.project.working_dir=${escapePathForShell(workDir, true)}" --format '{{ json .}}'`);
+  const resultingContainersRaw = await execAsync(`docker ps --filter "label=com.docker.compose.project.working_dir=${escapePathForShell(workDir, true)}" --format "{{ json .}}"`);
   const resultingContainers = formatDockerJSONOutputString(resultingContainersRaw);
   return resultingContainers;
 }
