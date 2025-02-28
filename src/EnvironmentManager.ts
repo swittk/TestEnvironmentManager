@@ -792,8 +792,10 @@ function escapePathForShell(path: string, insideQuotes = false): string {
     // When this path will be placed inside quotes in a larger string
     // We only need to escape characters that would break those quotes
     if (process.platform === 'win32') {
+      // Escape backslashes and double quotes correctly inside quoted strings
+      return path.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
       // On Windows, escape double quotes and preserve backslashes
-      return path.replace(/"/g, '\\"');
+      // return path.replace(/"/g, '\\"');
     } else {
       // On Unix, escape quotes and other characters that have special meaning inside quotes
       return path.replace(/["\\$`]/g, '\\$&');
@@ -801,9 +803,12 @@ function escapePathForShell(path: string, insideQuotes = false): string {
   } else {
     // For direct shell usage (not inside quotes elsewhere)
     if (process.platform === 'win32') {
-      // Windows: escape any existing quotes, then wrap in quotes
-      const escapedPath = path.replace(/"/g, '\\"');
+      // Escape double quotes properly for Windows CMD/PowerShell
+      const escapedPath = path.replace(/\\/g, '\\\\').replace(/"/g, '""');
       return `"${escapedPath}"`;
+      // Windows: escape any existing quotes, then wrap in quotes
+      // const escapedPath = path.replace(/"/g, '\\"');
+      // return `"${escapedPath}"`;
     } else {
       // Unix: escape special shell characters or wrap in quotes
       // Escape all special chars
