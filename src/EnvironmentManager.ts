@@ -595,7 +595,7 @@ export class EnvironmentManager {
 }
 
 async function getDockerComposeServicesByWorkDir(workDir: string) {
-  const resultingContainersRaw = await execAsync(`docker ps --filter "label=com.docker.compose.project.working_dir=${escapePathForShell(workDir)}" --format '{{ json .}}'`);
+  const resultingContainersRaw = await execAsync(`docker ps --filter "label=com.docker.compose.project.working_dir=${escapePathForShell(workDir, true)}" --format '{{ json .}}'`);
   const resultingContainers = formatDockerJSONOutputString(resultingContainersRaw);
   return resultingContainers;
 }
@@ -850,7 +850,7 @@ function formatDockerJSONOutputString(rawOutput: string): DockerPsEntry[] {
 }
 
 async function getComposeFileServices(composePath: string) {
-  const res = await execAsync(`docker ps --filter "label=com.docker.compose.project.config_files=${escapePathForShell(composePath)}" --format '{{json .}}'`);
+  const res = await execAsync(`docker ps --filter "label=com.docker.compose.project.config_files=${escapePathForShell(composePath, true)}" --format '{{json .}}'`);
   return formatDockerJSONOutputString(res);
 }
 
