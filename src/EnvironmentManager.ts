@@ -168,7 +168,7 @@ export class EnvironmentManager {
               throw 'No content or checksum provided';
             }
             let existing: { md5: string, filePath?: string } | undefined = this.ephemeralUploads.getUpload(fileConfig.checksum);
-            if(!existing) {
+            if (!existing) {
               // try in cache first
               existing = this.knownFilesMap.get(fileConfig.checksum);
             }
@@ -595,7 +595,7 @@ export class EnvironmentManager {
 }
 
 async function getDockerComposeServicesByWorkDir(workDir: string) {
-  const resultingContainersRaw = await execAsync(`docker ps --filter "label=com.docker.compose.project.working_dir=${escapeQuotedArgumentPath(workDir)}" --format '{{ json .}}'`);
+  const resultingContainersRaw = await execAsync(`docker ps --filter "label=com.docker.compose.project.working_dir=${escapePathForShell(workDir)}" --format '{{ json .}}'`);
   const resultingContainers = formatDockerJSONOutputString(resultingContainersRaw);
   return resultingContainers;
 }
@@ -603,11 +603,11 @@ async function getDockerComposeServicesByWorkDir(workDir: string) {
 async function upDockerCompose(args: { workDir?: string, composeFile: string, envFile?: string }) {
   const { workDir: _workDir, composeFile, envFile } = args;
   const workDir = _workDir ?? path.dirname(composeFile);
-  await execAsync(`docker compose --project-directory ${escapeQuotedArgumentPath(workDir)} -f ${escapeQuotedArgumentPath(composeFile)}${envFile ? ` --env-file ${escapeQuotedArgumentPath(envFile)}` : ''} up -d`);
+  await execAsync(`docker compose --project-directory ${escapePathForShell(workDir)} -f ${escapePathForShell(composeFile)}${envFile ? ` --env-file ${escapePathForShell(envFile)}` : ''} up -d`);
 }
 
 async function destroyComposeFileServices(env: Environment) {
-  await execAsync(`docker compose -f ${escapeQuotedArgumentPath(env.composeFile!)} down --volumes --rmi all --remove-orphans`);
+  await execAsync(`docker compose -f ${escapePathForShell(env.composeFile!)} down --volumes --rmi all --remove-orphans`);
 }
 
 // Express server setup
@@ -779,15 +779,49 @@ export function createServer(configPath?: string | TestEnvironmentConfig) {
 }
 
 /**
- * Function to safely escape workDir paths for shell execution
- * @param {string} workDir - The working directory path
- * @returns {string} - Escaped workDir for shell usage
+ * Safely escapes a path for use in shell commands, specifically when the path will be:
+ * 1. Used directly as a command argument, or
+ * 2. Placed inside quotes within a larger command string
+ *
+ * @param {string} path - The file or directory path to escape
+ * @param {boolean} insideQuotes - Whether this path will be placed inside quotes in a larger string
+ * @returns {string} - The properly escaped path
  */
-function escapeQuotedArgumentPath(value: string) {
-  // Escape double quotes and backslashes in the value
-  return value.replace(/["\\]/g, '\\$&');
-}
+function escapePathForShell(path: string, insideQuotes = false): string {
+  if (insideQuotes) {
+    // When this path will be placed inside quotes in a larger string
+    // We only need to escape characters that would break those quotes
+    if (process.platform === 'win32') {
+      // On Windows, escape double quotes and preserve backslashes
+      return path.replace(/"/g, '\\"');
+    } else {
+      // On Unix, escape quotes and other characters that have special meaning inside quotes
+      return path.replace(/["\\$`]/g, '\\$&');
+    }
+  } else {
+    // For direct shell usage (not inside quotes elsewhere)
+    if (process.platform === 'win32') {
+      // Windows: escape any existing quotes, then wrap in quotes
+      const escapedPath = path.replace(/"/g, '\\"');
+      return `"${escapedPath}"`;
+    } else {
+      // Unix: escape special shell characters or wrap in quotes
+      // Escape all special chars
+      return path.replace(/(["\s'$`\\()[\]<>|&;*?~])/g, '\\$&');
 
+      /* Alternative approach: Wrap in single quotes (simpler for many cases)
+       * // Single quotes preserve everything except single quotes themselves
+       * if (!path.includes("'")) {
+       *   return `'${path}'`;
+       * } else {
+       *   // If the path contains single quotes, we need to escape them
+       *   // This technique uses proper POSIX shell escaping
+       *   return "'" + path.replace(/'/g, "'\\''") + "'";
+       * }
+       */
+    }
+  }
+}
 type DockerPsEntry = {
   Command: string;
   CreatedAt: string;
@@ -816,7 +850,7 @@ function formatDockerJSONOutputString(rawOutput: string): DockerPsEntry[] {
 }
 
 async function getComposeFileServices(composePath: string) {
-  const res = await execAsync(`docker ps --filter "label=com.docker.compose.project.config_files=${escapeQuotedArgumentPath(composePath)}" --format '{{json .}}'`);
+  const res = await execAsync(`docker ps --filter "label=com.docker.compose.project.config_files=${escapePathForShell(composePath)}" --format '{{json .}}'`);
   return formatDockerJSONOutputString(res);
 }
 
