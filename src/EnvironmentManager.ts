@@ -3,7 +3,7 @@ import express from 'express';
 import Docker from 'dockerode';
 import DockerCompose from 'dockerode-compose';
 import { v4 as uuidv4 } from 'uuid';
-import { exec } from 'child_process';
+import { exec, ExecOptions } from 'child_process';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
@@ -16,14 +16,14 @@ import { EphemeralUploadManager } from './EphemeralUploadManager';
 import busboy from 'busboy';
 import crypto from 'crypto';
 
-function execAsync(cmd: string) {
+function execAsync(cmd: string, opts?: ExecOptions) {
   return new Promise<string>((resolve, reject) => {
-    exec(cmd, (error, stdout, stderr) => {
+    exec(cmd, opts, (error, stdout, stderr) => {
       if (error) return reject(error)
       // if (stderr) return reject(stderr)
-      resolve(stdout)
+      resolve(stdout as string);
     })
-  })
+  },)
 }
 
 interface PortDetectionEntry {
@@ -117,14 +117,20 @@ export class EnvironmentManager {
         cloneCmd = `git clone ${urlWithAuth} ${workDir}`;
       } else if (gitConfig.auth.sshKeyPath) {
         // Use SSH key
-        cloneCmd = `GIT_SSH_COMMAND='ssh -i ${gitConfig.auth.sshKeyPath}' ${cloneCmd}`;
+        if (process.platform === 'win32') {
+          // Windows uses 'set' and '&&' to set the variable for the command only.
+          cloneCmd = `set GIT_SSH_COMMAND=ssh -i ${gitConfig.auth.sshKeyPath} && git clone ${gitConfig.repoUrl} ${workDir}`;
+        } else {
+          // Unix-like systems
+          cloneCmd = `GIT_SSH_COMMAND='ssh -i ${gitConfig.auth.sshKeyPath}' git clone ${gitConfig.repoUrl} ${workDir}`;
+        }
       }
     }
     console.log('cloning the repo...')
     await execAsync(cloneCmd);
     if (branch) {
       console.log('Checking out')
-      await execAsync(`cd ${workDir} && git checkout ${branch}`);
+      await execAsync(`git checkout ${branch}`, { cwd: workDir });
     }
     return workDir;
   }
